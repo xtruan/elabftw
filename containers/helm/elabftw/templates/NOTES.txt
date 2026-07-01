@@ -1,0 +1,66 @@
+Thank you for installing {{ .Chart.Name }} (eLabFTW).
+
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+App version: {{ .Values.image.tag | default .Chart.AppVersion }}
+
+{{- if not .Values.secrets.existingSecret }}
+{{- if not .Values.secrets.secretKey }}
+
+  #####################################################################
+  WARNING: no SECRET_KEY set (secrets.secretKey is empty).
+  eLabFTW needs a SECRET_KEY to encrypt SMTP/timestamp passwords.
+  Generate one and set it via --set secrets.secretKey=... :
+
+    docker run --rm -t --entrypoint '/bin/sh' {{ .Values.image.repository }} \
+      -c "php -d memory_limit=10M -d open_basedir='' bin/init tools:genkey"
+
+  or fetch from https://get.elabftw.net/?key
+  #####################################################################
+{{- end }}
+{{- end }}
+
+Access the application:
+{{- if .Values.ingress.enabled }}
+
+  Ingress is enabled. Reach eLabFTW at:
+  {{- range .Values.ingress.hosts }}
+    http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+  {{- end }}
+{{- else if contains "LoadBalancer" .Values.service.type }}
+
+  Waiting for the LoadBalancer IP:
+    kubectl get svc -w {{ include "elabftw.fullname" . }} -n {{ .Release.Namespace }}
+{{- else }}
+
+  Port-forward to reach the app locally:
+    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "elabftw.fullname" . }} 8443:{{ .Values.service.port }}
+  Then browse to https://localhost:8443 (or http:// if DISABLE_HTTPS=true).
+{{- end }}
+
+Remember to set SITE_URL (web.env.SITE_URL) to the canonical user-facing URL,
+otherwise generated links and redirects may be wrong.
+
+{{- if or .Values.dbInit.init .Values.dbInit.migrate }}
+
+Database schema:
+  The elabimg entrypoint initializes the schema on container start
+  (AUTO_DB_INIT={{ .Values.dbInit.init }}, AUTO_DB_UPDATE={{ .Values.dbInit.migrate }}).
+  Follow progress with:
+    kubectl logs -n {{ .Release.Namespace }} deploy/{{ include "elabftw.fullname" . }} -c web
+{{- else }}
+
+Database schema:
+  Automatic init is disabled (dbInit.init and dbInit.migrate are false).
+  Initialize the schema manually:
+    kubectl exec -n {{ .Release.Namespace }} deploy/{{ include "elabftw.fullname" . }} -c web -- bin/init db:install
+{{- end }}
+
+{{- if gt (int .Values.replicaCount) 1 }}
+{{- if not .Values.redis.enabled }}
+
+  WARNING: replicaCount is {{ .Values.replicaCount }} but redis.enabled is false.
+  PHP sessions are not shared across pods; users will be logged out at random.
+  Enable Redis (redis.enabled=true) or point at an external Redis.
+{{- end }}
+{{- end }}

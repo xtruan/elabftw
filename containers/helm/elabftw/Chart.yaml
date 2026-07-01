@@ -1,0 +1,32 @@
+apiVersion: v2
+name: elabftw
+description: >-
+  A free, modern, versatile, secure electronic lab notebook for researchers.
+  This chart deploys the eLabFTW web application (nginx + php-fpm + chronos +
+  invoker, provided by the elabftw/elabimg image) together with an optional
+  MySQL database and optional Redis session store.
+type: application
+
+# version is the chart version. Bump this on every change to the chart.
+version: 0.1.0
+
+# appVersion tracks the eLabFTW application version (the elabimg tag).
+# Keep in sync with .Values.web.image.tag when you pin a version.
+appVersion: "stable"
+
+home: https://www.elabftw.net
+sources:
+  - https://github.com/elabftw/elabftw
+keywords:
+  - eln
+  - electronic-lab-notebook
+  - research
+  - elabftw
+  - laboratory
+maintainers:
+  - name: eLabFTW community
+    url: https://github.com/elabftw/elabftw
+
+annotations:
+  category: Science
+  licenses: AGPL-3.0-only

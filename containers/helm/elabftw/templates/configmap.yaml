@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "elabftw.fullname" . }}-env
+  labels:
+    {{- include "elabftw.labels" . | nindent 4 }}
+data:
+  {{- /* Emit all non-empty, non-secret web env vars from values */}}
+  {{- range $key, $val := .Values.web.env }}
+  {{- if and (ne $key "DB_HOST") (ne (toString $val) "") }}
+  {{ $key }}: {{ toString $val | quote }}
+  {{- end }}
+  {{- end }}
+  {{- /* DB_HOST is resolved from the bundled mysql service when not overridden */}}
+  DB_HOST: {{ include "elabftw.dbHost" . | quote }}
+  {{- /* Redis wiring when the bundled redis is enabled */}}
+  {{- if .Values.redis.enabled }}
+  USE_REDIS: "true"
+  REDIS_HOST: {{ include "elabftw.redis.fullname" . | quote }}
+  REDIS_PORT: {{ .Values.redis.service.port | quote }}
+  {{- end }}
+  {{- /* Schema install/upgrade handled by the elabimg entrypoint.
+         An explicit web.env.AUTO_DB_INIT/UPDATE (if set) takes precedence. */}}
+  {{- if not (hasKey .Values.web.env "AUTO_DB_INIT") }}
+  AUTO_DB_INIT: {{ .Values.dbInit.init | ternary "true" "false" | quote }}
+  {{- end }}
+  {{- if not (hasKey .Values.web.env "AUTO_DB_UPDATE") }}
+  AUTO_DB_UPDATE: {{ .Values.dbInit.migrate | ternary "true" "false" | quote }}
+  {{- end }}

@@ -1,0 +1,55 @@
+{{- if and .Values.persistence.uploads.enabled (not .Values.persistence.uploads.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "elabftw.fullname" . }}-uploads
+  labels:
+    {{- include "elabftw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+  {{- if or .Values.persistence.uploads.retain .Values.persistence.uploads.annotations }}
+  annotations:
+    {{- if .Values.persistence.uploads.retain }}
+    helm.sh/resource-policy: keep
+    {{- end }}
+    {{- with .Values.persistence.uploads.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.uploads.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.uploads.size | quote }}
+  {{- if .Values.persistence.uploads.storageClass }}
+  storageClassName: {{ .Values.persistence.uploads.storageClass | quote }}
+  {{- end }}
+{{- end }}
+{{- if and .Values.persistence.exports.enabled (not .Values.persistence.exports.existingClaim) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "elabftw.fullname" . }}-exports
+  labels:
+    {{- include "elabftw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+  {{- if or .Values.persistence.exports.retain .Values.persistence.exports.annotations }}
+  annotations:
+    {{- if .Values.persistence.exports.retain }}
+    helm.sh/resource-policy: keep
+    {{- end }}
+    {{- with .Values.persistence.exports.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.exports.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.exports.size | quote }}
+  {{- if .Values.persistence.exports.storageClass }}
+  storageClassName: {{ .Values.persistence.exports.storageClass | quote }}
+  {{- end }}
+{{- end }}
