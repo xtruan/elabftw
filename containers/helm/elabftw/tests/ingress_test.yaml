@@ -1,0 +1,93 @@
+suite: ingress
+templates:
+  - templates/ingress.yaml
+tests:
+  - it: renders nothing when ingress is disabled
+    set:
+      secrets.secretKey: test-key
+      ingress.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails when enabled without explicit hosts
+    set:
+      secrets.secretKey: test-key
+      ingress.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: ingress.enabled is true but ingress.hosts is not set. Provide ingress.hosts explicitly.
+
+  - it: defaults the ingress class to nginx
+    set:
+      secrets.secretKey: test-key
+      ingress.enabled: true
+      ingress.hosts:
+        - host: elab.example.org
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - isKind:
+          of: Ingress
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+
+  - it: uses an explicit ingress class when set
+    set:
+      secrets.secretKey: test-key
+      ingress.enabled: true
+      ingress.className: traefik
+      ingress.hosts:
+        - host: elab.example.org
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.ingressClassName
+          value: traefik
+
+  - it: routes the configured host to the web service
+    release:
+      name: rel
+    set:
+      secrets.secretKey: test-key
+      ingress.enabled: true
+      ingress.hosts:
+        - host: elab.example.org
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.rules[0].host
+          value: elab.example.org
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: rel-elabftw
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 443
+
+  - it: renders TLS block when configured
+    set:
+      secrets.secretKey: test-key
+      ingress.enabled: true
+      ingress.hosts:
+        - host: elab.example.org
+          paths:
+            - path: /
+              pathType: Prefix
+      ingress.tls:
+        - secretName: elabftw-tls
+          hosts:
+            - elab.example.org
+    asserts:
+      - equal:
+          path: spec.tls[0].secretName
+          value: elabftw-tls
+      - contains:
+          path: spec.tls[0].hosts
+          content: elab.example.org

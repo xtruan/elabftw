@@ -1,0 +1,92 @@
+suite: env configmap
+templates:
+  - templates/configmap.yaml
+tests:
+  - it: resolves DB_HOST to the bundled mysql service by default
+    set:
+      secrets.secretKey: test-key
+      mysql.enabled: true
+    release:
+      name: rel
+    asserts:
+      - equal:
+          path: data.DB_HOST
+          value: rel-elabftw-mysql
+
+  - it: uses an explicit DB_HOST override when provided
+    set:
+      secrets.secretKey: test-key
+      web.env.DB_HOST: external-db.example.com
+    asserts:
+      - equal:
+          path: data.DB_HOST
+          value: external-db.example.com
+
+  - it: wires redis env when the bundled redis is enabled
+    release:
+      name: rel
+    set:
+      secrets.secretKey: test-key
+      redis.enabled: true
+    asserts:
+      - equal:
+          path: data.USE_REDIS
+          value: "true"
+      - equal:
+          path: data.REDIS_HOST
+          value: rel-elabftw-redis
+      - equal:
+          path: data.REDIS_PORT
+          value: "6379"
+
+  - it: does not set redis env when redis is disabled
+    set:
+      secrets.secretKey: test-key
+      redis.enabled: false
+    asserts:
+      - isNull:
+          path: data.USE_REDIS
+
+  - it: enables AUTO_DB_INIT and AUTO_DB_UPDATE by default
+    set:
+      secrets.secretKey: test-key
+    asserts:
+      - equal:
+          path: data.AUTO_DB_INIT
+          value: "true"
+      - equal:
+          path: data.AUTO_DB_UPDATE
+          value: "true"
+
+  - it: disables schema commands when dbInit toggles are off
+    set:
+      secrets.secretKey: test-key
+      dbInit.init: false
+      dbInit.migrate: false
+    asserts:
+      - equal:
+          path: data.AUTO_DB_INIT
+          value: "false"
+      - equal:
+          path: data.AUTO_DB_UPDATE
+          value: "false"
+
+  - it: lets an explicit web.env.AUTO_DB_INIT override the dbInit toggle
+    set:
+      secrets.secretKey: test-key
+      web.env.AUTO_DB_INIT: "false"
+    asserts:
+      - equal:
+          path: data.AUTO_DB_INIT
+          value: "false"
+      - equal:
+          path: data.AUTO_DB_UPDATE
+          value: "true"
+
+  - it: DISABLE_HTTPS defaults to true (TLS terminated at ingress)
+    set:
+      secrets.secretKey: test-key
+    asserts:
+      - equal:
+          path: data.DISABLE_HTTPS
+          value: "true"

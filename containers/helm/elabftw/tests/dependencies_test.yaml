@@ -1,0 +1,64 @@
+suite: mysql, redis and secret
+tests:
+  - it: renders mysql StatefulSet and Service when enabled
+    template: templates/mysql.yaml
+    set:
+      secrets.secretKey: test-key
+      mysql.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - documentIndex: 1
+        isKind:
+          of: StatefulSet
+
+  - it: renders no mysql resources when disabled
+    template: templates/mysql.yaml
+    set:
+      secrets.secretKey: test-key
+      mysql.enabled: false
+      web.env.DB_HOST: external-db.example.com
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders redis only when enabled
+    template: templates/redis.yaml
+    set:
+      secrets.secretKey: test-key
+      redis.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders redis StatefulSet and Service when enabled
+    template: templates/redis.yaml
+    set:
+      secrets.secretKey: test-key
+      redis.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: creates a Secret with DB_PASSWORD and SECRET_KEY
+    template: templates/secret.yaml
+    set:
+      secrets.secretKey: test-key
+      secrets.dbPassword: test-db-pw
+    asserts:
+      - isKind:
+          of: Secret
+      - equal:
+          path: stringData.DB_PASSWORD
+          value: test-db-pw
+      - equal:
+          path: stringData.SECRET_KEY
+          value: test-key
+
+  - it: does not create a Secret when using an existingSecret
+    template: templates/secret.yaml
+    set:
+      secrets.existingSecret: my-secret
+    asserts:
+      - hasDocuments:
+          count: 0

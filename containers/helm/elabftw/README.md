@@ -192,12 +192,34 @@ helm install elab-dev ./containers/helm/elabftw \
 kubectl port-forward svc/elab-dev-elabftw 8443:443
 ```
 
-The `dbInit` Job handles schema install/upgrade automatically, so no
-`AUTO_DB_INIT` flag is needed.
+Schema install/upgrade is handled automatically by the elabimg entrypoint
+(`dbInit.init` / `dbInit.migrate`, both default `true`), so no manual step is
+needed. See [Database initialization](#database-initialization).
 
-## Validating changes
+## Tests
+
+The chart is covered by [`helm-unittest`](https://github.com/helm-unittest/helm-unittest)
+suites under `tests/`, plus `helm lint`. CI runs these on every pull request
+(`.github/workflows/helm.yml`).
+
+Run them locally:
 
 ```bash
+# one-time: install the plugin
+helm plugin install https://github.com/helm-unittest/helm-unittest
+
 helm lint containers/helm/elabftw
+helm unittest containers/helm/elabftw
+```
+
+The suites assert the key behaviors: image/tag, `NET_BIND_SERVICE` capability,
+probe scheme following `DISABLE_HTTPS`, MySQL wait init-container, `DB_HOST` and
+Redis wiring, `AUTO_DB_INIT`/`AUTO_DB_UPDATE` from `dbInit`, the ingress
+requiring explicit hosts and defaulting to the `nginx` class, and the uploads
+PVC `helm.sh/resource-policy: keep` retention.
+
+To eyeball rendered output:
+
+```bash
 helm template rel containers/helm/elabftw --set secrets.secretKey=abc | less
 ```

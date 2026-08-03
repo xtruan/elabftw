@@ -1,0 +1,42 @@
+---
+name: Helm chart
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'containers/helm/**'
+      - '.github/workflows/helm.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'containers/helm/**'
+      - '.github/workflows/helm.yml'
+
+jobs:
+  lint-and-test:
+    name: Lint and unit test the chart
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+
+      - name: helm lint
+        run: helm lint containers/helm/elabftw
+
+      - name: Validate default manifests render
+        run: |
+          helm template elabftw containers/helm/elabftw \
+            --set secrets.secretKey=ci-test-key > /dev/null
+
+      - name: Install helm-unittest plugin
+        run: helm plugin install --verify=false https://github.com/helm-unittest/helm-unittest
+
+      - name: helm unittest
+        run: helm unittest containers/helm/elabftw

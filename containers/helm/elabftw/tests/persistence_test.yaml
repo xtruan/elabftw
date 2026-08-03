@@ -1,0 +1,78 @@
+suite: persistence
+templates:
+  - templates/pvc.yaml
+tests:
+  - it: keeps the uploads PVC on uninstall by default
+    documentIndex: 0
+    set:
+      secrets.secretKey: test-key
+      persistence.uploads.enabled: true
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+
+  - it: does not keep the uploads PVC when retain is false
+    documentIndex: 0
+    set:
+      secrets.secretKey: test-key
+      persistence.uploads.enabled: true
+      persistence.uploads.retain: false
+    asserts:
+      - notExists:
+          path: metadata.annotations["helm.sh/resource-policy"]
+
+  - it: merges custom annotations with the keep policy
+    documentIndex: 0
+    set:
+      secrets.secretKey: test-key
+      persistence.uploads.enabled: true
+      persistence.uploads.retain: true
+      persistence.uploads.annotations:
+        example.com/foo: bar
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+      - equal:
+          path: metadata.annotations["example.com/foo"]
+          value: bar
+
+  - it: sets the requested storage size and access mode
+    documentIndex: 0
+    set:
+      secrets.secretKey: test-key
+      persistence.uploads.enabled: true
+      persistence.uploads.size: 50Gi
+    asserts:
+      - equal:
+          path: spec.resources.requests.storage
+          value: 50Gi
+      - contains:
+          path: spec.accessModes
+          content: ReadWriteOnce
+
+  - it: does not create the uploads PVC when an existingClaim is given
+    set:
+      secrets.secretKey: test-key
+      persistence.uploads.enabled: true
+      persistence.uploads.existingClaim: my-existing-pvc
+      persistence.exports.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: exports PVC defaults to not retained
+    set:
+      secrets.secretKey: test-key
+      persistence.uploads.enabled: false
+      persistence.exports.enabled: true
+      persistence.exports.retain: false
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - notExists:
+          path: metadata.annotations["helm.sh/resource-policy"]

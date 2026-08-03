@@ -7,3 +7,4 @@ This folder contains files related to containers of the application:
 * circleci: container for running tests in CI
 * cypress: for end-to-end tests
 * mysqltmp: database for tests
+* helm: Helm chart to deploy eLabFTW on Kubernetes (see `helm/elabftw/README.md`)
