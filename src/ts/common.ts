@@ -7,9 +7,11 @@
  */
 import $ from 'jquery';
 import { ApiC } from './api';
-import { Malle, InputType, SelectOptions } from '@deltablot/malle';
+import { Malle, InputType } from '@deltablot/malle';
+import type { SelectOptions } from '@deltablot/malle';
 import 'bootstrap/js/src/modal.js';
 import FavTag from './FavTag.class';
+import Heartbeat from './Heartbeat.class';
 import { clearLocalStorage, rememberLastSelected, selectLastSelected } from './localStorage';
 import {
   adjustHiddenState,
@@ -36,12 +38,15 @@ import {
   updateCatStat,
   makeMalleableColumnsGreatAgain, rebuildTomSelectOptions,
   mountRors,
+  initPermissionsTomSelects,
+  PERMISSION_SELECT_IDS,
+  reloadEntitiesShow,
 } from './misc';
 import i18next from './i18n';
 import { Metadata } from './Metadata.class';
 import { DateTime } from 'luxon';
-import { Action, EntityType, Model, LinkSubModel } from './interfaces';
-import { MathJaxObject } from 'mathjax-full/js/components/startup';
+import { Action, EntityType, Model, LinkSubModel, SingularEntityType } from './interfaces';
+import type { MathJaxObject } from '@mathjax/src/js/components/startup.js';
 declare const MathJax: MathJaxObject;
 import 'bootstrap-markdown-fa5/js/bootstrap-markdown';
 import 'bootstrap-markdown-fa5/locale/bootstrap-markdown.de.js';
@@ -65,9 +70,11 @@ import { Counter } from './Counter.class';
 import { getEditor } from './Editor.class';
 import Todolist from './Todolist.class';
 import { entity } from './getEntity';
-import { on, get } from './handlers';
+import { get, on } from './handlers';
 import Tab from './Tab.class';
 import { core } from './core';
+import { get as getFromSvelte } from 'svelte/store';
+import { writable } from 'svelte/store';
 
 // we need to extend the interface from malle to add more properties
 interface Status extends SelectOptions {
@@ -76,6 +83,123 @@ interface Status extends SelectOptions {
   title: string;
   is_current_team: number;
 }
+
+export const selectedEntities = writable<string[]>([]);
+
+// only on entity page
+const pageMode = new URLSearchParams(document.location.search).get('mode');
+
+const getSingularEntryTypeFromEntityType = (entity: EntityType): SingularEntityType => {
+  switch (entity) {
+  case EntityType.Experiment:
+    return SingularEntityType.Experiment;
+    break;
+  case EntityType.Item:
+    return SingularEntityType.Item;
+    break;
+  case EntityType.ItemType:
+    return SingularEntityType.ItemType;
+    break;
+  case EntityType.Template:
+    return SingularEntityType.Template;
+    break;
+  default:
+    return SingularEntityType.Other;
+  }
+};
+
+// Listen for this event to populate the modal text dynamically.
+// On view/edit pages, use the current entity id,
+// on the show page, get the item id of all checked boxes.
+on('toggle-modal', (el: HTMLElement) => {
+  if (el.matches('[data-target="deleteSelectedEntitiesModal"]')) {
+    let checked = [];
+    if (pageMode == 'view' || pageMode == 'edit') {
+      checked.push(entity.id);
+    } else {
+      checked = getFromSvelte(selectedEntities);
+      if (checked.length === 0) {
+        notify.error('nothing-selected');
+        return;
+      }
+    }
+    const count = checked.length;
+    const modalSelector = `#${el.dataset.target}`;
+    const deleteMsg = document.getElementById('deleteEntityMessage');
+    const deleteButton = document.getElementById('deleteSelectedEntitiesButton') as HTMLButtonElement;
+    const entityName = document.getElementById('pageTitle')?.textContent?.trim().toLowerCase() ?? '';
+    const entryName = getSingularEntryTypeFromEntityType(entity.type);
+    const translatedEntryName = i18next.t(entryName.replace('_', '-')).toLowerCase();
+
+    if (count == 1) {
+      deleteMsg.textContent = i18next.t('info-deleted-entry', {entry: (translatedEntryName)});
+    } else {
+      deleteMsg.textContent = i18next.t('info-deleted-entries', {count: count, entity: entityName});
+    }
+
+    deleteButton.disabled = true;
+    showModalAndFocusFirstInput(modalSelector);
+    setTimeout(() => deleteButton.disabled = false, 2000);
+  }
+});
+
+on('delete-selected-entities', async () => {
+  if (pageMode == 'view' || pageMode == 'edit') {
+    await ApiC.delete(`${entity.type}/${entity.id}`, { notifOnSaved:0 });
+    sessionStorage.setItem('flash_deleted', i18next.t('delete_success'));
+    window.location.href = window.location.pathname;
+    return;
+  }
+  const checked = getFromSvelte(selectedEntities);
+  if (checked.length === 0) {
+    notify.error('nothing-selected');
+    return;
+  }
+  // perform deletes
+  const deletes = checked.map(id =>
+    ApiC.delete(`${entity.type}/${id}`, { notifOnSaved:0 }),
+  );
+  Promise.all(deletes).then(() => {
+    notify.success(i18next.t('delete_success'));
+    reloadEntitiesShow();
+  });
+});
+
+// code to hide navbar on scroll down, and show it on scroll up.
+const root = document.documentElement;
+const navbar = document.getElementById('main-navbar');
+
+if (navbar) {
+  const navbarHeight = `${navbar.offsetHeight}px`;
+  root.style.setProperty('--navbar-height', navbarHeight);
+  let lastScroll = Math.max(0, window.scrollY);
+  let ticking = false;
+  let isNavbarHidden = false;
+
+  window.addEventListener('scroll', () => {
+    if (ticking) {
+      return;
+    }
+
+    ticking = true;
+
+    window.requestAnimationFrame(() => {
+      const currentScroll = Math.max(0, window.scrollY);
+      const shouldHide = currentScroll > 0 && currentScroll > lastScroll;
+
+      if (shouldHide !== isNavbarHidden) {
+        navbar.classList.toggle('hidden', shouldHide);
+        root.style.setProperty('--navbar-height', shouldHide ? '0px' : navbarHeight);
+        isNavbarHidden = shouldHide;
+      }
+
+      lastScroll = currentScroll;
+      ticking = false;
+    });
+  }, { passive: true });
+}
+
+const container = document.getElementById('container')!;
 
 on('toggle-dark-mode', (el: HTMLElement) => {
   const currentTheme = parseInt(el.dataset.currentTheme, 10);
@@ -90,22 +214,11 @@ on('toggle-dark-mode', (el: HTMLElement) => {
 });
 
 // HEARTBEAT
-// this function is to check periodically that we are still authenticated
-// and show a message if we the session is not valid anymore but we are still on a page requiring auth
-// only run if we are an authenticated user
 if (core.isAuth) {
-  // check every 5 minutes
-  const heartRate = 300000;
-  setInterval(() => {
-    fetch('app/controllers/HeartBeat.php').then(response => {
-      if (!response.ok) {
-        clearLocalStorage();
-        alert('Your session expired!');
-        window.location.replace('login.php');
-      }
-    }).catch(error => alert(error));
-  }, heartRate);
+  new Heartbeat();
 }
+// END HEARTBEAT
+
 
 const FavTagC = new FavTag();
 const TodolistC = new Todolist();
@@ -251,60 +364,7 @@ document.querySelectorAll('[data-dismiss-key]').forEach((msg: HTMLElement) => {
 
 makeMalleableColumnsGreatAgain();
 
-// selector for all {permission}_select (canread, canwrite, canbook)
-const permissionSelects = document.querySelectorAll<HTMLSelectElement>(
-  '[id$="_select_teamgroups"], [id$="_select_teams"], [id$="_select_users"]',
-);
-
-function initPermissionsTomSelects() {
-  if (permissionSelects.length === 0) return;
-  permissionSelects.forEach((select) => {
-    const tsSelect = select as HTMLSelectElement & { tomselect?: TomSelect };
-    // avoid re-init of tomselect if already exists
-    if (tsSelect.tomselect) return;
-    const config = {
-      plugins: {
-        no_backspace_delete: {},
-        remove_button: {},
-      },
-      // display many things or users will be confused what they search is not displayed right away
-      maxOptions: 2222,
-      onInitialize() { setSelectedItemsDivVisibility(this); },
-      onItemAdd() {
-        this.setTextboxValue('');
-        setSelectedItemsDivVisibility(this);
-      },
-      onItemRemove() { setSelectedItemsDivVisibility(this); },
-    };
-    const wrapper = select.closest('.ts-wrapper');
-    config['dropdownParent'] = wrapper;
-    config['controlInput'] = wrapper?.querySelector('input');
-    // for users, we return a formatted response with id - user (email)
-    if (select.id.endsWith('_select_users')) {
-      config['load'] = (query: string, callback) => {
-        if (!query.length) return callback();
-        fetchUsers(query).then(callback).catch(() => callback());
-      };
-    }
-    new TomSelect(select, config);
-  });
-}
-
 initPermissionsTomSelects();
-
-// make the div holding selected items disappear when empty and vice versa.
-function setSelectedItemsDivVisibility(instance) {
-  instance.control.style.display = instance.items.length ? 'flex' : 'none';
-}
-
-// fetch users and return in an id - username (email) format
-async function fetchUsers(query: string) {
-  const users = await ApiC.getJson(`/users/search?q=${encodeURIComponent(query)}`);
-  return users.map((u) => ({
-    value: `user:${u.userid}`,
-    text: `${u.fullname} (${u.email})`,
-  }));
-}
 
 on('team-scope-change', async (el: HTMLElement) => {
   const scope = Number(el.dataset.value);
@@ -350,6 +410,7 @@ on('team-scope-change', async (el: HTMLElement) => {
 });
 
 document.addEventListener('scope-changed', () => {
+  const permissionSelects = document.querySelectorAll<HTMLSelectElement>(PERMISSION_SELECT_IDS);
   permissionSelects.forEach(select => rebuildTomSelectOptions(select));
 });
 
@@ -371,9 +432,6 @@ document.addEventListener('scope-changed', () => {
     });
   }
 });
-
-// only on entity page
-const pageMode = new URLSearchParams(document.location.search).get('mode');
 
 notify.flashSuccess();
 
@@ -728,6 +786,8 @@ on('save-permissions', (el: HTMLElement) => {
   params[el.dataset.rw] = collectPermissionsFromModal(el.dataset.identifier);
   const baseSelect = getSafeElementById(`${el.dataset.identifier}_select_base`) as HTMLSelectElement;
   params[baseSelect.name] = baseSelect.value;
+
+  const divId = el.dataset.identifier + 'Div';
   // if we're editing the default read/write permissions for experiments, this data attribute will be set
   if (el.dataset.isUserDefault) {
     // we need to replace canread/canwrite with default_read/default_write for user attribute
@@ -738,9 +798,9 @@ on('save-permissions', (el: HTMLElement) => {
     // create a new key and delete the old one
     params[paramKey] = params[el.dataset.rw];
     delete params[el.dataset.rw];
-    ApiC.patch(`${Model.User}/me`, params).then(() => reloadElements([el.dataset.identifier + 'Div']));
+    ApiC.patch(`${Model.User}/me`, params).then(() => reloadElements([divId]));
   } else {
-    ApiC.patch(`${entity.type}/${entity.id}`, params).then(() => reloadElements([el.dataset.identifier + 'Div']));
+    ApiC.patch(`${entity.type}/${entity.id}`, params).then(() => reloadElements([divId]));
   }
 });
 
@@ -761,8 +821,7 @@ on('save-permissions-both', (el: HTMLElement) => {
   const permissions = collectPermissionsFromModal(el.dataset.identifier);
   const baseSelect = getSafeElementById(`${el.dataset.identifier}_select_base`) as HTMLSelectElement;
   const params = {canread: permissions, canread_base: baseSelect.value, canwrite: permissions, canwrite_base: baseSelect.value};
-  ApiC.patch(`${entity.type}/${entity.id}`, params)
-    .then(() => reloadElements(['canreadDiv', 'canwriteDiv']));
+  ApiC.patch(`${entity.type}/${entity.id}`, params).then(() => reloadElements(['canreadDiv', 'canwriteDiv']));
 });
 
 on('select-lang', () => {
@@ -1065,18 +1124,53 @@ on('replace-with-next', (el: HTMLElement) => {
   // hide clicked element
   el.toggleAttribute('hidden');
 });
+// TODO this requires jquery for now. Not in BS5.
 on('toggle-modal', (el: HTMLElement) => {
-  // TODO this requires jquery for now. Not in BS5.
-  $('#' + el.dataset.target).modal('show');
+  const modalSelector = `#${el.dataset.target}`;
+  showModalAndFocusFirstInput(modalSelector);
 });
 
-on('update-entity-body', (el: HTMLElement) => {
-  updateEntityBody().then(() => {
-    // SAVE AND GO BACK BUTTON
-    if (el.matches('[data-redirect="view"]')) {
-      window.location.replace('?mode=view&id=' + entity.id);
-    }
+// autofocus the first input of a modal
+function focusFirstTextInputOnShown(modalSelector: string) {
+  const modal = document.querySelector<HTMLElement>(modalSelector);
+  if (!modal) return;
+  $(modal).one('shown.bs.modal', () => {
+    modal.querySelector<HTMLElement>(
+      'input:is([type="text"], [type="search"], [type="email"], [type="url"], [type="tel"], [type="password"], [type="number"]):not([disabled]):not([readonly]):not(.ts-wrapper input), ' +
+      'input:not([type]):not([disabled]):not([readonly]):not(.ts-wrapper input), ' +
+      'textarea:not([disabled]):not([readonly])',
+    )?.focus();
   });
+}
+
+function ensureModalIsContainerChild(modal: HTMLElement): void {
+  // we do that to avoid issues with sticky navbar/z-index
+  if (modal.parentElement !== container) {
+    container.appendChild(modal);
+  }
+}
+
+export function showModal(modalSelector: string) {
+  const modal = document.querySelector<HTMLElement>(modalSelector);
+  if (!modal) return;
+
+  ensureModalIsContainerChild(modal);
+  $(modal).modal('show');
+}
+
+export function showModalAndFocusFirstInput(modalSelector: string) {
+  focusFirstTextInputOnShown(modalSelector);
+  showModal(modalSelector);
+}
+
+on('update-entity-body', async (el: HTMLElement) => {
+  const redirect = el.dataset.redirect === 'view';
+  await updateEntityBody(redirect);
+  // SAVE AND GO BACK BUTTON
+  if (redirect) {
+    sessionStorage.setItem('flash_saved', i18next.t('saved'));
+    window.location.replace('?mode=view&id=' + entity.id);
+  }
 });
 
 on('search-pubchem', (el: HTMLElement) => {
@@ -1341,7 +1435,8 @@ on('reload-color', (el: HTMLElement) => {
 });
 
 // CREATE CATEGORY OR STATUS
-on('create-catstat', (el: HTMLElement) => {
+on('create-catstat', (el: HTMLElement, e: Event) => {
+  e.preventDefault();
   const modalId = 'createCatStatModal';
   const form = document.getElementById(modalId);
   try {
@@ -1424,7 +1519,7 @@ on('toggle-body', (el: HTMLElement) => {
   if (el.dataset.revid) {
     queryUrl += `/revisions/${el.dataset.revid}`;
   }
-  ApiC.getJson(queryUrl).then(json => {
+  ApiC.getJson(queryUrl).then(async json => {
     // skip extra fields on the revisions page (focus remains on body). See #6053
     if (window.location.pathname !== '/revisions.php') {
       // add extra fields elements from metadata json
@@ -1444,8 +1539,8 @@ on('toggle-body', (el: HTMLElement) => {
     const width = document.getElementById('parent_' + randId).clientWidth - 30;
     bodyDiv.style.width = String(width);
 
-    // ask mathjax to reparse the page
-    MathJax.typeset();
+    // ask mathjax to parse the freshly loaded body
+    await MathJax.typesetPromise([bodyDiv]);
 
     TableSortingC.init();
 
@@ -1565,12 +1660,11 @@ on('scope-change', async (el: HTMLElement) => {
 /**
  * MAIN click listener on container
  */
-const container = document.getElementById('container')!;
 container.addEventListener('click', (event: Event) => {
   const rawTarget = event.target as HTMLElement | null;
   const el = rawTarget?.closest('[data-action]') as HTMLElement | null;
-  if (!el || !container.contains(el)) return;
-  const set = get(el.dataset.action);
+  if (!el || ! container.contains(el)) return;
+  const set =  get(el.dataset.action);
   if (!set) return;
   // do not use for..of here!
   set.forEach(fn => {

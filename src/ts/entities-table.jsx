@@ -13,7 +13,6 @@ import {
   ClientSideRowModelModule,
   ModuleRegistry,
   PaginationModule,
-  QuickFilterModule,
   RowSelectionModule,
   TextFilterModule,
   provideGlobalGridOptions,
@@ -21,8 +20,7 @@ import {
 import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { get } from 'svelte/store';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ApiC } from './api';
 import i18next from './i18n';
@@ -32,7 +30,6 @@ import { DEFAULT_AG_GRID_PAGINATION, getEntityTypeFromPage } from './misc';
 const yesNo = v => v === 1 ? i18next.t('yes') : i18next.t('no');
 const lastLoginText = v => v === null ? i18next.t('never') : v;
 let entitiesTableRoot = null;
-const isExtendedSearch = value => /(?:^|\s)\w+:[^\s]+/.test(value);
 
 const normalizeStringParam = value => {
   if (value === null || value === undefined) {
@@ -117,7 +114,6 @@ const rowSelection = {
 };
 
 const EntitiesTable = ({
-  searchQuery,
   selectedEntities,
   order = 'date',
   sort = 'desc',
@@ -125,21 +121,9 @@ const EntitiesTable = ({
   relatedOrigin = '',
 }) => {
   const [rowData, setRowData] = useState([]);
-  const gridApiRef = useRef(null);
   const isDark = document.documentElement.classList.contains('dark-mode');
 
-  const onGridReady = (params) => {
-    gridApiRef.current = params.api;
-
-    if (searchQuery) {
-      const value = get(searchQuery);
-
-      params.api.setGridOption(
-        'quickFilterText',
-        isExtendedSearch(value) ? '' : value,
-      );
-    }
-
+  const onGridReady = () => {
     fetchData();
   };
 
@@ -195,14 +179,16 @@ const EntitiesTable = ({
     { field: 'team_name', headerName: i18next.t('team') },
     { field: 'date', headerName: i18next.t('started-on'), valueGetter: p => lastLoginText(p.data.date), filterValueGetter: p => lastLoginText(p.data.date), cellRenderer: PastDateRenderer},
     { field: 'category', headerName: i18next.t('category'), valueGetter: p => p.data.category_title },
-    { field: 'status', headerName: i18next.t('status'), valueGetter: p => p.data.status_title  },
-    { field: 'tags_decoded', headerName: i18next.t('tags'), valueGetter: p => p.data.tags_decoded, cellRenderer: TagsRenderer },
+    { field: 'status', headerName: i18next.t('status'), valueGetter: p => p.data.status_title },
+    { field: 'tags_decoded', headerName: i18next.t('tags'), valueGetter: p => p.data.tags_decoded, filterValueGetter: p => p.data.tags_decoded?.map(tagData => tagData.tag).join(' ') ?? '', cellRenderer: TagsRenderer },
     { field: 'id', headerName: i18next.t('id') },
     { field: 'custom_id', headerName: i18next.t('custom-id') },
     { field: 'fullname', headerName: i18next.t('owner') },
-    { field: 'timestamped', headerName: i18next.t('Is timestamped'), valueGetter: p => yesNo(p.data.timestamped), filterValueGetter: p => yesNo(p.data.timestamped), cellRenderer: BinaryRenderer },
-    { field: 'locked', headerName: i18next.t('Is locked'), valueGetter: p => yesNo(p.data.locked), filterValueGetter: p => yesNo(p.data.locked), cellRenderer: BinaryRenderer },
-    { field: 'rating', headerName: i18next.t('Rating'), cellRenderer: RatingsRenderer }
+    { field: 'timestamped', headerName: i18next.t('is-timestamped'), valueGetter: p => yesNo(p.data.timestamped), filterValueGetter: p => yesNo(p.data.timestamped), cellRenderer: BinaryRenderer },
+    { field: 'modified_at', headerName: i18next.t('last-modified-at'), valueGetter: p => p.data.modified_at },
+    { field: 'locked', headerName: i18next.t('is-locked'), valueGetter: p => yesNo(p.data.locked), filterValueGetter: p => yesNo(p.data.locked), cellRenderer: BinaryRenderer },
+    { field: 'rating', headerName: i18next.t('rating'), cellRenderer: RatingsRenderer },
+    { field: 'next_step', headerName: i18next.t('next-step'),  cellRenderer: ({ value }) => value ? value.split('|')[0] : null }
   ]);
 
   const getResolvedEntityFilterParams = useCallback(event => {
@@ -246,21 +232,6 @@ const EntitiesTable = ({
     };
   }, [fetchData]);
 
-  useEffect(() => {
-    if (!searchQuery) {
-      return undefined;
-    }
-
-    const unsubscribe = searchQuery.subscribe(value => {
-      gridApiRef.current?.setGridOption(
-        'quickFilterText',
-        isExtendedSearch(value) ? '' : value,
-      );
-    });
-
-    return unsubscribe;
-  }, [searchQuery]);
-
   // when a row is selected with the checkbox
   const selectionChanged = (event) => {
     const selectedRows = event.api.getSelectedRows();
@@ -289,6 +260,7 @@ const EntitiesTable = ({
 
   const cellClicked = event => {
     const target = event.event?.target;
+    const url = `?mode=view&id=${encodeURIComponent(event.data.id)}`;
 
     if (
       target instanceof HTMLElement
@@ -296,8 +268,11 @@ const EntitiesTable = ({
     ) {
       return;
     }
-
-    window.location = `?mode=view&id=${encodeURIComponent(event.data.id)}`;
+    if (event.event?.ctrlKey || event.event?.metaKey) {
+      window.open(url, '_blank');
+      return;
+    }
+    window.location = url;
   };
 
   return (
@@ -320,9 +295,8 @@ const EntitiesTable = ({
   );
 };
 
-const App = ({ searchQuery, selectedEntities, order, sort, related, relatedOrigin }) => (
+const App = ({ selectedEntities, order, sort, related, relatedOrigin }) => (
   <EntitiesTable
-    searchQuery={searchQuery}
     selectedEntities={selectedEntities}
     order={order}
     sort={sort}
@@ -333,7 +307,6 @@ const App = ({ searchQuery, selectedEntities, order, sort, related, relatedOrigi
 
 export const mountEntitiesTable = (
   rootElement,
-  searchQuery,
   selectedEntities,
   order = 'date',
   sort = 'desc',
@@ -350,7 +323,6 @@ export const mountEntitiesTable = (
     RowSelectionModule,
     PaginationModule,
     TextFilterModule,
-    QuickFilterModule,
   ]);
 
   if (!entitiesTableRoot) {
@@ -359,7 +331,6 @@ export const mountEntitiesTable = (
 
   entitiesTableRoot.render(
     <App
-      searchQuery={searchQuery}
       selectedEntities={selectedEntities}
       order={order}
       sort={sort}

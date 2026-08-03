@@ -570,10 +570,11 @@
 
     <div class='d-flex justify-content-between'>
       <label for='email_domain' class='col-form-label'>{{ 'Enforce a domain name for emails'|trans }}</label>
-      <input id='email_domain' class='form-control col-md-3' type='text' placeholder='example.edu' value='{{ App.Config.configArr.email_domain }}' data-trigger='blur' data-model='config' data-target='email_domain' />
+      <input id='email_domain' class='form-control col-md-3' type='text' placeholder='example.de' value='{{ App.Config.configArr.email_domain }}' data-trigger='blur' data-model='config' data-target='email_domain' />
     </div>
     <p class='smallgray'>{{ 'Only email addresses at this domain will be allowed to register an account.'|trans }}<br>
-    {{ 'You can add several domains by separating them with a comma.'|trans }}</p>
+    {{ 'You can add several domains by separating them with a comma.'|trans }}<br>
+    {{ 'Use a wildcard to allow subdomains, for example: *.example.de.'|trans }}</p>
     <hr>
 
     <div class='d-flex justify-content-between'>
@@ -1217,7 +1218,7 @@
     <p id='auditLogsTableLabel'>{{ 'This table lists the most recent events recorded in the application and worth keeping a trace of.'|trans }}</p>
     {# Refresh button #}
     <div class='text-center'>
-      <button type='button' aria-label='{{ 'Refresh'|trans }}' class='btn btn-secondary btn-sm mb-2' data-action='reload-on-click' data-target='auditLogsTable'><i class='fas fa-rotate color-white mr-1'></i>{{ 'Refresh'|trans }}</button>
+      <button type='button' aria-label='{{ 'Refresh'|trans }}' class='btn btn-secondary btn-sm mb-2' data-action='reload-on-click' data-target='auditLogsTable'><i class='fas fa-rotate mr-1'></i>{{ 'Refresh'|trans }}</button>
     </div>
     {# Logs are presented in a sortable table #}
     {% include 'filter-input-snippet.html' with {'target': 'auditLogsTable'} %}

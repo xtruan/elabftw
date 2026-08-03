@@ -17,11 +17,13 @@ use Elabftw\Enums\Action;
 use Elabftw\Enums\Orderby;
 use Elabftw\Enums\Sort;
 use Elabftw\Enums\State;
+use Elabftw\Exceptions\IllegalActionException;
 use Elabftw\Params\BaseQueryParams;
 use Elabftw\Params\OrderingParams;
 use Elabftw\Params\StatusParams;
 use Elabftw\Services\Check;
 use Elabftw\Services\Filter;
+use Elabftw\Services\TeamsHelper;
 use Elabftw\Traits\RandomColorTrait;
 use Elabftw\Traits\SetIdTrait;
 use PDO;
@@ -30,6 +32,7 @@ use Override;
 
 use function _;
 use function sprintf;
+use function array_key_exists;
 
 /**
  * Status for experiments or items
@@ -79,9 +82,10 @@ abstract class AbstractStatus extends AbstractCategory
     public function readOne(): array
     {
         $sql = sprintf('SELECT id, title, color, ordering, state, team, is_private
-            FROM %s WHERE id = :id', $this->table);
+            FROM %s WHERE id = :id AND team = :team', $this->table);
         $req = $this->Db->prepare($sql);
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
+        $req->bindParam(':team', $this->Teams->id, PDO::PARAM_INT);
         $this->Db->execute($req);
         return $this->Db->fetch($req);
     }
@@ -108,11 +112,12 @@ abstract class AbstractStatus extends AbstractCategory
                 CASE WHEN entity.team = :team THEN 1 ELSE 0 END AS is_current_team
              FROM %s AS entity
              INNER JOIN teams ON teams.id = entity.team
-             WHERE entity.is_private = 0 OR entity.team = :team',
+             WHERE (entity.is_private = 0 OR entity.team = :team)',
             $this->table
         );
 
         $queryParams ??= $this->getQueryParams();
+        $sql .= $queryParams->getStatesSql('entity');
         $sql .= $queryParams->getSql();
 
         $req = $this->Db->prepare($sql);
@@ -138,6 +143,13 @@ abstract class AbstractStatus extends AbstractCategory
     public function patch(Action $action, array $params): array
     {
         $this->canWriteOrExplode();
+        // special case for is_private: must be team Admin (see #6519)
+        if (array_key_exists('is_private', $params)) {
+            $helper = new TeamsHelper($this->Teams->id ?? 0);
+            if ($helper->isAdminInTeam($this->Teams->Users->getUserid()) === false) {
+                throw new IllegalActionException(description: _('Only a team Admin can modify the visibility.'));
+            }
+        }
         foreach ($params as $key => $value) {
             $this->update(new StatusParams($key, (string) $value));
         }
@@ -172,10 +184,11 @@ abstract class AbstractStatus extends AbstractCategory
 
     private function update(StatusParams $params): bool
     {
-        $sql = sprintf('UPDATE %s SET ' . $params->getColumn() . ' = :content WHERE id = :id', $this->table);
+        $sql = sprintf('UPDATE %s SET ' . $params->getColumn() . ' = :content WHERE id = :id AND team = :team', $this->table);
         $req = $this->Db->prepare($sql);
         $req->bindValue(':content', $params->getContent());
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
+        $req->bindValue(':team', $this->Teams->Users->getTeam(), PDO::PARAM_INT);
         return $this->Db->execute($req);
     }
 }

@@ -164,6 +164,14 @@ enum EntityType {
   Other = 'other',
 }
 
+enum SingularEntityType {
+  Experiment = 'experiment',
+  Item = 'item',
+  ItemType = 'item_type',
+  Template = 'experiment_template',
+  Other = 'other',
+}
+
 enum Target {
   All = 'all',
   Body = 'body',
@@ -208,19 +216,23 @@ interface Entity {
 
 export {
   Action,
-  BinaryValue,
-  Categories,
-  CheckableItem,
-  Entity,
   EntityType,
+  SingularEntityType,
   FileType,
   Method,
   Model,
   ProcurementState,
-  ResponseMsg,
-  Selected,
   LinkSubModel,
   Target,
+};
+
+export type {
+  BinaryValue,
+  Categories,
+  CheckableItem,
+  Entity,
+  ResponseMsg,
+  Selected,
   Todoitem,
   UnfinishedEntities,
   Upload,

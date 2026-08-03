@@ -11,6 +11,7 @@
   import { ApiC } from '../api';
   import i18next from '../i18n';
   import { State, type StateValue } from '../state.auto';
+  import { relativeMoment } from "../misc";
 
   // this is only used in the template, so it is stripped by svelte during compilation
   // copy it so it stays available
@@ -42,6 +43,8 @@
     team_name?: string | null;
     timestamped?: boolean;
     signature_count?: number;
+    last_signed_by?: number;
+    timestampedby?: number;
     next_step?: string | null;
     locked?: boolean;
     modified_at?: string | null;
@@ -52,6 +55,7 @@
   }
 
   const t = i18next.t.bind(i18next);
+  const SEARCH_DEBOUNCE_MS = 500;
 
   let {
     entityType = 'experiments',
@@ -59,6 +63,7 @@
     order = 'date',
     sort = 'desc',
     searchQuery,
+    queryPending,
     selectedEntities = [],
     currentUserId = null,
     currentTeam = null,
@@ -71,6 +76,7 @@
     order?: string;
     sort?: string;
     searchQuery: Writable<string>;
+    queryPending?: Writable<boolean>;
     selectedEntities: Writable<string[]>;
     currentUserId?: number | null;
     currentTeam?: number | null;
@@ -91,6 +97,17 @@
   let sentinelEl: HTMLDivElement | null = null;
   let currentQueryKey = '';
   let reloadVersion = $state(0);
+  let debouncedSearchQuery = $state('');
+  let searchDebounceTimer: number | undefined;
+  let hasPendingQueryResults = $state(false);
+  let queryResultsRequestSeq = 0;
+  let hasInitializedDebouncedSearch = false;
+  let nonSearchFilterSignature = '';
+
+  function setPendingQueryResults(value: boolean): void {
+    hasPendingQueryResults = value;
+    queryPending?.set(value);
+  }
 
   function bumpUrlVersion(): void {
     urlVersion += 1;
@@ -114,6 +131,23 @@
     currentRelated: number | null;
     currentRelatedOrigin: string;
   };
+
+  let fullnames = $state<Record<number, string>>({});
+  const loadingFullnames = new Set<number>();
+
+  async function getFullname(userId: number): Promise<void> {
+    if (!userId || fullnames[userId] || loadingFullnames.has(userId)) return;
+
+    loadingFullnames.add(userId);
+
+    try {
+      const user = await ApiC.getJson(`users/${userId}`);
+      fullnames[userId] = user.fullname;
+    } finally {
+      loadingFullnames.delete(userId);
+    }
+  }
+
 
   function handleFilterClick(
     event: MouseEvent,
@@ -193,15 +227,62 @@
     setSingleTagInUrl(tag);
   }
 
-  function bumpReloadVersion(): void {
+  function getCurrentNonSearchFilterSignature(): string {
+    const params = new URL(window.location.href).searchParams;
+    const normalized = new URLSearchParams(params);
+
+    normalized.delete('q');
+    normalized.delete('offset');
+
+    return normalized.toString();
+  }
+
+  function bumpReloadVersionIfFiltersChanged(): void {
+    nonSearchFilterSignature = getCurrentNonSearchFilterSignature();
     reloadVersion += 1;
   }
+
+  $effect(() => {
+    const nextQuery = $searchQuery.trim();
+
+    if (!hasInitializedDebouncedSearch) {
+      hasInitializedDebouncedSearch = true;
+      debouncedSearchQuery = nextQuery;
+      setPendingQueryResults(false);
+      return;
+    }
+
+    if (nextQuery === debouncedSearchQuery) {
+      setPendingQueryResults(queryResultsRequestSeq !== 0);
+      return;
+    }
+
+    setPendingQueryResults(true);
+
+    if (searchDebounceTimer !== undefined) {
+      window.clearTimeout(searchDebounceTimer);
+    }
+
+    searchDebounceTimer = window.setTimeout(() => {
+      if (debouncedSearchQuery !== nextQuery) {
+        debouncedSearchQuery = nextQuery;
+      }
+
+      searchDebounceTimer = undefined;
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      if (searchDebounceTimer !== undefined) {
+        window.clearTimeout(searchDebounceTimer);
+      }
+    };
+  });
 
   function getEntityQueryContext(): EntityQueryContext {
     return {
       currentType: entityType,
       currentLimit: limit,
-      currentQ: $searchQuery.trim(),
+      currentQ: debouncedSearchQuery,
       currentCategory: getCurrentUrlParam('category'),
       currentStatus: getCurrentUrlParam('status'),
       currentOwner: getCurrentUrlParam('owner'),
@@ -240,6 +321,14 @@
   }
 
   $effect(() => {
+    entities;
+    void tick().then(() => {
+      document.querySelectorAll('.relative-moment').forEach(el => el.textContent = '');
+      relativeMoment();
+    });
+  });
+
+  $effect(() => {
     urlVersion;
 
     const currentReloadVersion = reloadVersion;
@@ -265,7 +354,7 @@
           return;
         }
 
-        if (isLoading || isLoadingMore || !hasMore || entities.length === 0) {
+        if (hasPendingQueryResults || isLoading || isLoadingMore || !hasMore || entities.length === 0) {
           return;
         }
 
@@ -316,6 +405,10 @@
       isLoading = true;
     } else {
       isLoadingMore = true;
+    }
+
+    if (replace && hasPendingQueryResults && currentQ === $searchQuery.trim()) {
+      queryResultsRequestSeq = seq;
     }
 
     try {
@@ -416,6 +509,11 @@
           isLoadingMore = false;
         }
 
+        if (queryResultsRequestSeq === seq && currentQ === $searchQuery.trim()) {
+          queryResultsRequestSeq = 0;
+          setPendingQueryResults(false);
+        }
+
         if (!hasReportedInitialLoad) {
           hasReportedInitialLoad = true;
           await tick();
@@ -453,7 +551,7 @@
   }
 
   function getLeftColor(entity: EntityListItem): string {
-    return entity.category_color || 'bdbdbd';
+    return entity.category_color || '6f6f6f';
   }
 
   function canEditEntity(entity: EntityListItem): boolean {
@@ -461,12 +559,14 @@
   }
 
   onMount(() => {
+    nonSearchFilterSignature = getCurrentNonSearchFilterSignature();
+
     window.addEventListener('popstate', bumpUrlVersion);
-    window.addEventListener('entity-filters-changed', bumpReloadVersion);
+    window.addEventListener('entity-filters-changed', bumpReloadVersionIfFiltersChanged);
 
     return () => {
       window.removeEventListener('popstate', bumpUrlVersion);
-      window.removeEventListener('entity-filters-changed', bumpReloadVersion);
+      window.removeEventListener('entity-filters-changed', bumpReloadVersionIfFiltersChanged);
     };
   });
 </script>
@@ -506,17 +606,53 @@
         <div class='align-self-center'>
           <div>
             {#if entity.timestamped}
-              <i
-                style={`color:#${getLeftColor(entity)}`}
-                class='far fa-calendar-check fa-fw'
-              ></i>
+              <div
+                class='infotip'
+                role='img'
+                aria-label={`${t('timestamped-by')} ${fullnames[entity.timestampedby] || ''}`}
+                onmouseenter={() => getFullname(entity.timestampedby)}
+              >
+                <span class='infotip-icon'>
+                  <i
+                    style={`color:#${getLeftColor(entity)}`}
+                    class='fas fa-calendar-check fa-fw'
+                    aria-hidden='true'
+                  ></i>
+                </span>
+
+                <p class='infotip-text'>
+                  {#if fullnames[entity.last_signed_by]}
+                    {t('timestamped-by')} {fullnames[entity.timestampedby]}
+                  {:else}
+                    {t('loading')}
+                  {/if}
+                </p>
+              </div>
             {/if}
 
             {#if entity.signature_count > 0}
-              <i
-                style={`color:#${getLeftColor(entity)}`}
-                class='fas fa-signature fa-fw'
-              ></i>
+              <div
+                class='infotip'
+                role='img'
+                aria-label={`${t('signed-by')} ${fullnames[entity.last_signed_by] || ''}`}
+                onmouseenter={() => getFullname(entity.last_signed_by)}
+              >
+                <span class='infotip-icon'>
+                  <i
+                    style={`color:#${getLeftColor(entity)}`}
+                    class='fas fa-signature fa-fw'
+                    aria-hidden='true'
+                  ></i>
+                </span>
+
+                <p class='infotip-text'>
+                  {#if fullnames[entity.last_signed_by]}
+                    {t('signed-by')} {fullnames[entity.last_signed_by]}
+                  {:else}
+                    {t('loading')}
+                  {/if}
+                </p>
+              </div>
             {/if}
 
             {#if entity.state === EntityState.Archived}

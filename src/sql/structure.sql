@@ -1342,7 +1342,7 @@ CREATE TABLE `users` (
   `orcid` varchar(19) NULL DEFAULT NULL,
   `orgid` varchar(255) NULL DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `token` varchar(255) DEFAULT NULL,
+  `token` char(32) CHARACTER SET ascii COLLATE ascii_bin NULL DEFAULT NULL,
   `token_created_at` TIMESTAMP NULL DEFAULT NULL,
   `limit_nb` tinyint UNSIGNED NOT NULL DEFAULT 15,
   `sc_create` varchar(1) NOT NULL DEFAULT 'c',
@@ -2334,6 +2334,7 @@ ALTER TABLE `experiments_templates_edit_mode`
 --
 ALTER TABLE `users` ADD INDEX `idx_users_email_userid` (email, userid);
 ALTER TABLE `users` ADD INDEX `idx_users_orgid_userid` (orgid, userid);
+ALTER TABLE `users` ADD UNIQUE INDEX `idx_users_token` (`token`);
 
 --
 -- Indexes and Constraints for table `users2teams`
@@ -2466,6 +2467,78 @@ CREATE UNIQUE INDEX uniq_tags2entity_type_item_tag
     ON tags2entity (item_type, item_id, tag_id);
 -- end schema 210
 
+-- schema 216
+-- Add fulltext indexes used by the plain q search fast path.
+ALTER TABLE `experiments`
+  ADD FULLTEXT INDEX `idx_experiments_q` (`title`, `body`, `elabid`);
+
+ALTER TABLE `items`
+  ADD FULLTEXT INDEX `idx_items_q` (`title`, `body`, `elabid`);
+
+ALTER TABLE `experiments_templates`
+  ADD FULLTEXT INDEX `idx_experiments_templates_q` (`title`, `body`, `elabid`);
+
+ALTER TABLE `items_types`
+  ADD FULLTEXT INDEX `idx_items_types_q` (`title`, `body`, `elabid`);
+
+ALTER TABLE `compounds`
+  ADD FULLTEXT INDEX `idx_compounds_q` (
+    `cas_number`,
+    `ec_number`,
+    `name`,
+    `iupac_name`,
+    `inchi_key`,
+    `molecular_formula`
+  );
+
+ALTER TABLE `experiments`
+  ADD INDEX `idx_experiments_state_date_id` (`state`, `date`, `id`),
+  ADD INDEX `idx_experiments_state_modified_id` (`state`, `modified_at`, `id`),
+  ADD INDEX idx_experiments_user_state_modified_id
+  (userid, state, modified_at, id);
+
+ALTER TABLE `items`
+  ADD INDEX `idx_items_state_date_id` (`state`, `date`, `id`),
+  ADD INDEX `idx_items_state_modified_id` (`state`, `modified_at`, `id`),
+  ADD INDEX idx_items_user_state_modified_id
+  (userid, state, modified_at, id);
+
+ALTER TABLE `experiments_templates`
+  ADD INDEX `idx_experiments_templates_state_created_id` (`state`, `created_at`, `id`),
+  ADD INDEX `idx_experiments_templates_state_modified_id` (`state`, `modified_at`, `id`),
+  ADD INDEX idx_experiments_templates_user_state_modified_id
+  (userid, state, modified_at, id);
+
+ALTER TABLE `items_types`
+  ADD INDEX `idx_items_types_state_created_id` (`state`, `created_at`, `id`),
+  ADD INDEX `idx_items_types_state_modified_id` (`state`, `modified_at`, `id`),
+  ADD INDEX idx_items_types_user_state_modified_id
+  (userid, state, modified_at, id);
+
+ALTER TABLE `experiments_steps`
+  ADD INDEX `idx_experiments_steps_next` (`item_id`, `finished`, `ordering`, `id`);
+
+ALTER TABLE `items_steps`
+  ADD INDEX `idx_items_steps_next` (`item_id`, `finished`, `ordering`, `id`);
+
+ALTER TABLE `experiments_templates_steps`
+  ADD INDEX `idx_experiments_templates_steps_next` (`item_id`, `finished`, `ordering`, `id`);
+
+ALTER TABLE `items_types_steps`
+  ADD INDEX `idx_items_types_steps_next` (`item_id`, `finished`, `ordering`, `id`);
+
+ALTER TABLE `experiments_comments`
+  ADD INDEX `idx_experiments_comments_item_created` (`item_id`, `created_at`);
+
+ALTER TABLE `items_comments`
+  ADD INDEX `idx_items_comments_item_created` (`item_id`, `created_at`);
+
+ALTER TABLE `experiments_templates_comments`
+  ADD INDEX `idx_experiments_templates_comments_item_created` (`item_id`, `created_at`);
+
+ALTER TABLE `items_types_comments`
+  ADD INDEX `idx_items_types_comments_item_created` (`item_id`, `created_at`);
+-- end schema 216
 
 COMMIT;
 

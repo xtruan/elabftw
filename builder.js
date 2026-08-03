@@ -16,8 +16,17 @@ const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const MinimizerPlugin = require('minimizer-webpack-plugin');
 const webpack = require('webpack');
 const sveltePreprocess = require('svelte-preprocess');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
+const mathjaxNewcmRoot = path.resolve(
+  path.dirname(
+    require.resolve('@mathjax/mathjax-newcm-font/js/svg.js'),
+  ),
+  '..',
+);
 
-module.exports = (env) => {
+module.exports = (env, argv) => {
+  const mode = argv.mode ?? 'production';
+  const isDevelopment = mode === 'development';
   return {
     entry: {
       main: [
@@ -88,10 +97,9 @@ module.exports = (env) => {
         './src/ts/spreadsheet-utils.ts',
       ],
     },
-    // uncomment this to find where the error is coming from
-    // makes the build slower
-    //devtool: 'inline-source-map',
-    mode: 'production',
+    // faster but less precise source map
+    devtool: isDevelopment ? 'cheap-module-source-map' : false,
+    mode,
     output: {
       filename: '[name].bundle.js',
       path: path.resolve(__dirname, 'web/assets')
@@ -101,7 +109,7 @@ module.exports = (env) => {
         chunks: 'all',
         name: 'vendor',
       },
-      minimize: true,
+      minimize: !isDevelopment,
       minimizer: [
         '...',
         new MinimizerPlugin({
@@ -125,6 +133,23 @@ module.exports = (env) => {
       new webpack.ProvidePlugin({
         process: 'process/browser.js',
       }),
+      new CopyWebpackPlugin({
+        patterns: [
+          {
+            from: path.resolve(
+              __dirname,
+              '/run/elabftw/yarn/unplugged/indigo-ketcher-npm-*/node_modules/indigo-ketcher/**/*.wasm',
+            ),
+            to: '[name][ext]',
+            noErrorOnMissing: false,
+          },
+          {
+            from: path.join(mathjaxNewcmRoot, 'svg', 'dynamic'),
+            to: 'mathjax/mathjax-newcm-font/svg/dynamic',
+            noErrorOnMissing: false,
+          },
+        ],
+      }),
     ],
     resolve: {
       extensions: ['.ts', '.js', '.jsx', '.svelte'],
@@ -144,7 +169,7 @@ module.exports = (env) => {
             loader: 'ts-loader',
             options: {
               // in prod, we don't have the types of some libs, use transpileOnly to avoid errors
-              transpileOnly: env.production
+              transpileOnly: !isDevelopment,
               }
           },
         },
@@ -168,6 +193,7 @@ module.exports = (env) => {
         },
         {
           test: /\.jsx?$/,
+          include: path.resolve(__dirname, 'src'),
           use: ["babel-loader"]
         },
         { // SASS loader

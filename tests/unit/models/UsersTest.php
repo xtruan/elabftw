@@ -16,6 +16,7 @@ use Elabftw\Enums\Action;
 use Elabftw\Enums\Scope;
 use Elabftw\Enums\Usergroup;
 use Elabftw\Enums\Users2TeamsTargets;
+use Elabftw\Enums\UsersColumn;
 use Elabftw\Exceptions\IllegalActionException;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Exceptions\ResourceNotFoundException;
@@ -25,6 +26,7 @@ use Elabftw\Traits\TestsUtilsTrait;
 
 use function count;
 use function is_array;
+use function strtoupper;
 
 class UsersTest extends \PHPUnit\Framework\TestCase
 {
@@ -106,6 +108,23 @@ class UsersTest extends \PHPUnit\Framework\TestCase
         $result = (new Users(4, 2, $sysadminUser))->patch(Action::Update, $params);
         $this->assertEquals('tatabis@yopmail.com', $result['email']);
         $this->assertEquals('Yep', $result['lastname']);
+    }
+
+    public function testUpdateAccountWithLegacyUppercaseEmail(): void
+    {
+        $sysadminUser = new Users(1, 1);
+        $target = new Users(4, 2, $sysadminUser);
+        $expectedEmail = $target->userData['email'];
+        $uppercaseEmail = strtoupper($expectedEmail);
+
+        // Reproduce an email stored before addresses were normalized to lowercase.
+        $target->rawUpdate(UsersColumn::Email, $uppercaseEmail);
+
+        // The edit modal submits every field, including the unchanged email.
+        $result = (new Users(4, 2, $sysadminUser))->patch(Action::Update, array(
+            'email' => $uppercaseEmail,
+        ));
+        $this->assertSame($expectedEmail, $result['email']);
     }
 
     public function testUpdateWrongOrcid(): void
@@ -280,12 +299,17 @@ class UsersTest extends \PHPUnit\Framework\TestCase
         // tata in bravo
         $Admin = $this->getUserInTeam(team: 2, admin: 1);
         $user2 = $this->getUserInTeam(team: 2);
+        // create an api key
+        $ApiKeys = new ApiKeys($user2);
+        $ApiKeys->create('yep', 1);
         $Users2Teams = new Users2Teams($Admin);
         $this->assertEquals(1, $Users2Teams->patchUser2Team(array(
             'target' => Users2TeamsTargets::IsArchived->value,
             'content' => '1',
             'team' => '2',
         ), $user2->userid));
+        // make sure keys have been deleted after archival
+        $this->assertCount(0, $ApiKeys->readAll());
     }
 
     public function testCreateUser(): void

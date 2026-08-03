@@ -23,6 +23,7 @@ use function dirname;
 use function putenv;
 use function setlocale;
 use function textdomain;
+use function sprintf;
 
 /**
  * This class is used to generate the translations files for i18next (javascript)
@@ -81,8 +82,7 @@ final class i18n4Js
             'current-edit' => _('Currently editing'),
             'custom-fields' => _('Custom fields'),
             'delete' => _('Delete'),
-            'delete-confirmation' => _('Delete {{num, number}} line(s)?'),
-            'delete-selected' => _('Delete selected rows'),
+            'delete-success' => _('Deleted successfully'),
             'done' => _('Done'),
             'dropzone-upload-area' => _('Drop files here to upload'),
             'dropzone-filesize-limit' => _('File size limit:'),
@@ -102,6 +102,8 @@ final class i18n4Js
             'error-fetch-request' => _('There was an error while fetching the requested data: {{error}}'),
             'error-parsing-metadata' => _('There was an error while parsing metadata (custom fields). Full error has been logged to the browser console.'),
             'existing-ror-associations' => _('Existing ROR associations'),
+            'experiment' => _('Experiment'),
+            'experiment-template' => _('Experiment template'),
             'export' => _('Export'),
             'export-success' => _('Export successful.'),
             'filename' => _('Filename'),
@@ -113,6 +115,8 @@ final class i18n4Js
             'is-archived' => _('Is Archived'),
             'is-owner' => _('Is Owner'),
             'is-sysadmin' => _('Is Sysadmin'),
+            'item' => _('Resource'),
+            'item-type' => _('Resource template'),
             'last-login' => _('Last login'),
             'lastname' => _('Lastname'),
             'file-imported' => _('File imported successfully'),
@@ -126,7 +130,11 @@ final class i18n4Js
             'import-spreadsheet' => _('Import a spreadsheet (xls, csv, ods, ...)'),
             // import errors often print html content
             'import-error' => _('Error during import. Please check the console for more information.'),
+            'info-deleted-entries' => _('Are you sure you want to delete {{count, number}} {{entity, string}}?'),
+            'info-deleted-entry' => _('Are you sure you want to delete this {{entry, string}}?'),
             'invalid-info' => _('Invalid syntax or information provided.'),
+            'is-locked' => _('Is locked'),
+            'last-modified-at' => _('Last modified at'),
             'loading' => _('Loading'),
             'link-delete-warning' => _('Delete this link?'),
             'location-name' => _('Location name'),
@@ -136,6 +144,8 @@ final class i18n4Js
             'my-teams' => _('My teams'),
             'name' => _('Name'),
             'new-spreadsheet' => _('New spreadsheet'),
+            'new-version' => _('A new version is available!'),
+            'next-step' => _('Next step'),
             'no-self-links' => _('Linking an item to itself is not allowed. Please select a different target.'),
             'not-found' => _('No matching result found.'),
             'no-rors' => _('No ROR associated yet.'),
@@ -146,10 +156,13 @@ final class i18n4Js
             'oc-version-warning' => _('Warning: current OpenCloning version is incompatible with this version of eLabFTW.'),
             'onboarding-email-sent' => _('Onboarding email(s) will soon be sent.'),
             'only-a-sysadmin' => _('Only a Sysadmin can modify this.'),
+            'other' => _('Other'),
             'owner' => _('Owner'),
             'ownership-transfer' => _('Your entry has been successfully transferred to the selected user.'),
             'organisation-name' => _('Organisation name'),
             'please-wait' => _('Please wait…'),
+            'rating' => _('Rating'),
+            'read-release-notes' => _('Read release notes'),
             'readonly' => _('Read-only'),
             'remove' => _('Remove'),
             'rename-column' => _('New title for the column'),
@@ -162,16 +175,19 @@ final class i18n4Js
             'ror-description-team' => _('These RORs apply only to the current team.'),
             'ror-description-user' => _('These RORs apply only to your account.'),
             'ror-input-label' => _('Add Research Organization Registry (ROR) identifier'),
-            'ror-input-title' => _('Enter a valid 9-character ROR ID, for example 04t0gwh46 or https://ror.org/04t0gwh46'),
+            'ror-input-title' => sprintf(_('Enter a valid 9-character ROR ID, for example 04t0gwh46 or %s'), 'https://ror.org/04t0gwh46'),
             'save' => _('Save'),
             'save-and-go-back' => _('Save and go back'),
             'save-attachment' => _('Save as attachment'),
             'saved' => _('Saved'),
             'search' => _('Search'),
             'select-resource' => _('Select a resource'),
+            'session-expiring' => _('Your session will expire soon due to inactivity.'),
+            'session-expiring-title' => _('eLabFTW session expiring'),
             'show-all' => _('Show all'),
             'show-archived' => _('Show archived'),
             'show-deleted' => _('Show deleted'),
+            'signed-by' => _('Signed by'),
             'signing' => _('Signing'),
             'sort-by-column' => _('Sort by column'),
             'started-on' => _('Started on'),
@@ -183,6 +199,8 @@ final class i18n4Js
             'team' => _('Team'),
             'teams' => _('Teams'),
             'template-title' => _('Template title'),
+            'is-timestamped' => _('Is timestamped'),
+            'timestamped-by' => _('Timestamped by'),
             'title' => _('Title'),
             'today' => _('Today'),
             'toggle-pin' => _('Toggle pin'),
@@ -197,6 +215,7 @@ final class i18n4Js
             'valid-until' => _('Valid until'),
             'validated' => _('Validated'),
             'view-template' => _('View template'),
+            'view-upgrade-guide' => _('View upgrade guide'),
         );
     }
 
